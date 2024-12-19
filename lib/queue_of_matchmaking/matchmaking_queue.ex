@@ -129,13 +129,8 @@ defmodule QueueOfMatchmaking.MatchmakingQueue do
       }
     ]
 
-    case :ets.select(@queue_table_name, match_spec) do
-      entries when is_list(entries) ->
-        Enum.each(entries, &:ets.delete_object(@queue_table_name, &1))
-
-      [] ->
-        :ok
-    end
+    entries = :ets.select(@queue_table_name, match_spec)
+    Enum.each(entries, &:ets.delete_object(@queue_table_name, &1))
   end
 
   defp find_match(user_id, rank) do
