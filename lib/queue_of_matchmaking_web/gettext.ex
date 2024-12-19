@@ -20,5 +20,5 @@ defmodule QueueOfMatchmakingWeb.Gettext do
 
   See the [Gettext Docs](https://hexdocs.pm/gettext) for detailed usage.
   """
-  use Gettext, otp_app: :queue_of_matchmaking
+  use Gettext, backend: QueueOfMatchmaking.Gettext
 end
