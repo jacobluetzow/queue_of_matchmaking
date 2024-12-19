@@ -7,6 +7,11 @@ defmodule QueueOfMatchmakingWeb.Schema.Types do
     field(:rank, non_null(:integer))
   end
 
+  object :match do
+    field(:timestamp, non_null(:integer))
+    field(:users, non_null(list_of(non_null(:user))))
+  end
+
   @desc "Response for match request operations"
   object :request_response do
     field(:ok, non_null(:boolean))

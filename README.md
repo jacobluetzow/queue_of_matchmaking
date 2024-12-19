@@ -59,14 +59,72 @@ Response on success:
 }
 ```
 
-Response on error:
+### Viewing Queue Status
+
+Get the current state of the matchmaking queue:
+
+```graphql
+query {
+  queueStatus {
+    userId
+    rank
+  }
+}
+```
+
+Response:
 ```json
 {
   "data": {
-    "addRequest": {
-      "ok": false,
-      "error": "User already in queue"
+    "queueStatus": [
+      {
+        "userId": "Player123",
+        "rank": 1500
+      },
+      {
+        "userId": "Player456",
+        "rank": 1550
+      }
+    ]
+  }
+}
+```
+
+### Viewing Match History
+
+Get the history of completed matches:
+
+```graphql
+query {
+  matchHistory(limit: 5) {
+    timestamp
+    users {
+      userId
+      rank
     }
+  }
+}
+```
+
+Response:
+```json
+{
+  "data": {
+    "matchHistory": [
+      {
+        "timestamp": 1703001234,
+        "users": [
+          {
+            "userId": "Player123",
+            "rank": 1500
+          },
+          {
+            "userId": "Player456",
+            "rank": 1480
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -108,21 +166,27 @@ When a match is found, subscribers receive:
 
 ## Matchmaking Logic
 
-The system uses the following strategy to create fair matches:
+The system uses an expanding window approach to create fair matches:
 
 1. Initial matching attempts to find users within ±10 rank points
 2. If no match is found, the range expands by 90 points each iteration
 3. Maximum rank difference allowed is 500 points
 4. Users are paired with the closest available match within the current range
 
+This approach balances match fairness with queue times:
+- Quick matches for players when similarly ranked opponents are available
+- Gradually relaxed requirements to prevent excessive wait times
+- Hard limit on rank difference to prevent highly mismatched games
+
 ## Implementation Details
 
 ### Data Storage
 
-- Uses ETS tables for in-memory storage
-- Separate tables for active queue and completed matches
-- Ordered set for efficient rank-based matching
+- Uses ETS tables for in-memory storage:
+  - `matchmaking_queue`: Ordered set for active queue (sorted by rank)
+  - `matches`: Set for completed match history
 - Protected access for data integrity
+- Efficient rank-based matching using ETS ordered sets
 
 ### Concurrency Handling
 
@@ -130,6 +194,17 @@ The system uses the following strategy to create fair matches:
 - ETS provides atomic operations for queue management
 - Phoenix PubSub handles real-time notifications
 - Absinthe manages subscription state
+
+## Configuration
+
+Key configurations (in `lib/queue_of_matchmaking/matchmaking_queue.ex`):
+```elixir
+@initial_rank_window 10      # Initial search window (±10)
+@rank_window_increment 90    # Window expansion per iteration
+@max_rank_window 500        # Maximum allowed rank difference
+```
+
+These values can be adjusted to balance match quality vs. queue times.
 
 ## Testing
 
@@ -141,43 +216,10 @@ mix test
 Tests cover:
 - Queue operations
 - Match processing
-- GraphQL mutations
+- GraphQL mutations and queries
 - Real-time subscriptions
 - Concurrent request handling
 - Edge cases and validation
-
-## Performance Considerations
-
-- Efficient rank-based matching using ETS ordered sets
-- Minimal data copying through ETS direct access
-- Non-blocking subscription notifications
-- Configurable matching windows for performance tuning
-
-## Configuration
-
-Key configurations (in `lib/queue_of_matchmaking/matchmaking_queue.ex`):
-```elixir
-# Start looking for matches within ±10 rank
-@initial_rank_window 10
-# Increment by this amount each expansion
-@rank_window_increment 90
-# Maximum rank difference to consider
-@max_rank_window 500
-```
-
-These values control the matchmaking algorithm's behavior:
-
-- `@initial_rank_window`: When looking for a match, the system first tries to find players within ±10 rank points of the searching player. For example, if a player with rank 1500 joins, it initially looks for players between 1490-1510.
-
-- `@rank_window_increment`: If no match is found in the initial window, the search range expands by this amount in both directions. In this case, it expands by 90 points each iteration. So the search would go:
-  - First try: 1490-1510 (±10)
-  - Second try: 1400-1600 (±100)
-  - Third try: 1310-1690 (±190)
-  And so on until either a match is found or max_rank_window is reached.
-
-- `@max_rank_window`: The maximum allowed difference between two matched players' ranks. At 500, this means players cannot be matched if their ranks differ by more than 500 points. For example, a 1500-rated player will never match with anyone below 1000 or above 2000, ensuring some level of skill parity in matches.
-
-These values can be adjusted to make the matchmaking more or less strict, or to change how quickly it expands its search. Lower values will create more balanced matches but might increase queue times, while higher values will create matches more quickly but with potentially larger skill gaps.
 
 ## Development
 
@@ -190,20 +232,4 @@ To start development:
 
 ## License
 
-MIT License
-Copyright (c) 2024 Jacob Luetzow
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+MIT License - See LICENSE file for details

@@ -3,8 +3,33 @@ defmodule QueueOfMatchmakingWeb.Schema do
   import_types(QueueOfMatchmakingWeb.Schema.Types)
 
   query do
-    field :health_check, :boolean do
-      resolve(fn _, _ -> {:ok, true} end)
+    @desc "Get current queue status"
+    field :queue_status, list_of(:user) do
+      resolve(fn _, _ ->
+        queue_entries = :ets.tab2list(:matchmaking_queue)
+
+        users =
+          Enum.map(queue_entries, fn {{_rank, user_id}, rank} ->
+            %{user_id: user_id, rank: rank}
+          end)
+
+        {:ok, users}
+      end)
+    end
+
+    @desc "Get match history"
+    field :match_history, list_of(:match) do
+      arg(:limit, :integer, default_value: 10)
+
+      resolve(fn %{limit: limit}, _ ->
+        matches =
+          :ets.tab2list(:matches)
+          |> Enum.map(fn {_key, match_data} -> match_data end)
+          |> Enum.sort_by(& &1.timestamp, :desc)
+          |> Enum.take(limit)
+
+        {:ok, matches}
+      end)
     end
   end
 
